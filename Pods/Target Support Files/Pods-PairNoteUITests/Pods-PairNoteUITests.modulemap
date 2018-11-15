@@ -1,0 +1,6 @@
+framework module Pods_PairNoteUITests {
+  umbrella header "Pods-PairNoteUITests-umbrella.h"
+
+  export *
+  module * { export * }
+}
