@@ -27,6 +27,12 @@ class NoteClientViewController: UIViewController {
         contentTableView.delegate = self
         contentTableView.dataSource = self
         
+        let textAttributes = [NSAttributedStringKey.foregroundColor:UIColor.red]
+        navigationController?.navigationBar.titleTextAttributes = textAttributes
+        
+        let addBarButton = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addButtonClicked(_:)))
+        self.navigationItem.rightBarButtonItem = addBarButton
+        
         setupServer()
         startReadingQueue()
         
@@ -36,6 +42,21 @@ class NoteClientViewController: UIViewController {
     override func didReceiveMemoryWarning() {
         super.didReceiveMemoryWarning()
         // Dispose of any resources that can be recreated.
+    }
+    
+    @objc func addButtonClicked( _ sender: Any) {
+        let alert = UIAlertController(title: "Add a new entry", message: "", preferredStyle: .alert)
+        alert.addTextField(configurationHandler: { (textField) in
+            textField.placeholder = "Enter content here"
+        })
+        alert.addAction(UIAlertAction(title: "Ok", style: .default, handler:  { [weak alert] (_) in
+            if let textField = alert?.textFields?[0], let content = textField.text {
+                self.client.send(data: PacketTool.share.addEntry(content: content))
+            }
+        }))
+        
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
+        self.present(alert, animated: true)
     }
     
     @IBAction func sendMessage(_ sender: Any) {
@@ -63,10 +84,34 @@ class NoteClientViewController: UIViewController {
                     print(packetType)
                     switch packetType{
                     case .allContent:
+                        let myGroup = DispatchGroup()
+                        myGroup.enter()
                         let entries = PacketTool.share.readAllContentPacket(packet: bytes)
                         self.entryModel.initList(entries: entries)
-                        DispatchQueue.main.async {
+                        myGroup.leave()
+                        myGroup.notify(queue: DispatchQueue.main) {
                             self.contentTableView.reloadData()
+                            self.navigationItem.title = ""
+                        }
+
+                        break
+                    case .notifyNew:
+                        DispatchQueue.main.async {
+                            self.navigationItem.title = "New Message"
+                        }
+                    case .respondRequest:
+                        let (id, granted) = PacketTool.share.getRequestResult(packet: bytes)
+                        if(granted) {
+                            if let entry = self.entryModel.getEntry(id: id) {
+                                entry.isLocked = true
+                                DispatchQueue.main.async {
+                                    self.contentTableView.reloadData()
+                                }
+                            }
+                        } else {
+                            DispatchQueue.main.async {
+                                self.presentAlert(title: "Request Fail", messageStr: "Server is Editing")
+                            }
                         }
                         break
                     default: break
@@ -79,14 +124,53 @@ class NoteClientViewController: UIViewController {
         self.readingQueue.async(execute: self.readingWorkItem!)
     }
     
-    func presentAlert(title : String){
-        let alert = UIAlertController(title: title, message: "Get New Message", preferredStyle: .alert)
+    func presentAlert(title : String, messageStr : String){
+        let alert = UIAlertController(title: title, message: messageStr, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "Ok", style: .default, handler: nil))
         self.present(alert, animated: true)
     }
     
-    func fetchList(){
+    func pressCell(cellNum : Int){
+        let entry = entryModel.entryList[cellNum]
+        let entryId = entry.identifier
+        let entryMessage = entry.content
         
+        if(entry.isLocked) {
+            let handler = PressCellHandler.share
+            
+            handler.editAction = {
+                let alert = UIAlertController(title: "Edit this entry", message: "", preferredStyle: .alert)
+                alert.addTextField(configurationHandler: { (textField) in
+                    textField.text = entryMessage
+                })
+                alert.addAction(UIAlertAction(title: "Ok", style: .default, handler:  { [weak alert] (_) in
+                    if let textField = alert?.textFields?[0], let content = textField.text {
+                        //tell server
+                        self.client.send(data: PacketTool.share.modifyEntry(id: entryId, content: content))
+                        entry.isLocked = false
+                    }
+                }))
+                
+                alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
+                self.present(alert, animated: true)
+            }
+            
+            handler.deleteAction = {
+                //tell server
+                self.client.send(data: PacketTool.share.deleteEntry(id: entryId))
+                entry.isLocked = false
+            }
+            
+            handler.present(from: self, type: .normal)
+            
+        } else {
+            //request access
+            let handler = PressCellHandler.share
+            handler.requestAction = {
+                self.client.send(data: PacketTool.share.requestModify(id : entryId))
+            }
+            handler.present(from: self, type: .request)
+        }
     }
 
 }
@@ -102,6 +186,8 @@ extension NoteClientViewController: UITableViewDataSource {
         cell.textLabel?.text = "\(indexPath.row + 1) \(entry.content)"
         if(entry.isLocked) {
             cell.textLabel?.textColor = UIColor.blue
+        } else {
+            cell.textLabel?.textColor = UIColor.black
         }
         return cell
     }
@@ -111,7 +197,7 @@ extension NoteClientViewController: UITableViewDataSource {
 
 extension NoteClientViewController : UITableViewDelegate {
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        //pressCell(cellNum: indexPath.row)
+        pressCell(cellNum: indexPath.row)
     }
     
 }

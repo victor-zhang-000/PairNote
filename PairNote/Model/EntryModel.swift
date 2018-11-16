@@ -12,10 +12,12 @@ class Entry {
     var identifier : String
     var content : String
     var isLocked : Bool
+    var serverEditing : Bool
     init(id : String){
         identifier = id
         content = ""
         isLocked = false
+        serverEditing = false
     }
 }
 
@@ -28,9 +30,10 @@ class AllEntries {
         let newEntry = Entry(id : PacketTool.share.generateID())
         newEntry.content = content
         let myGroup = DispatchGroup()
+        myGroup.enter()
         queue.async(flags : .barrier) {
-            myGroup.enter()
             self.entryList.append(newEntry)
+            print("added")
             myGroup.leave()
         }
         myGroup.notify(queue: DispatchQueue.main) {
@@ -40,8 +43,8 @@ class AllEntries {
    
     public func remove(id : String, completion : @escaping () -> Void) {
         let myGroup = DispatchGroup()
+        myGroup.enter()
         queue.async {
-            myGroup.enter()
             self.entryList = self.entryList.filter() { $0.identifier != id }
             myGroup.leave()
         }
@@ -52,8 +55,8 @@ class AllEntries {
     
     public func edit(id : String, newContent : String, completion : @escaping () -> Void) {
         let myGroup = DispatchGroup()
+        myGroup.enter()
         queue.async {
-            myGroup.enter()
             for entry in self.entryList {
                 if(entry.identifier == id) {
                     entry.content = newContent
@@ -64,6 +67,15 @@ class AllEntries {
         myGroup.notify(queue: DispatchQueue.main) {
             completion()
         }
+    }
+    
+    public func getEntry(id : String) -> Entry?{
+        for entry in entryList{
+            if(entry.identifier == id) {
+                return entry
+            }
+        }
+        return nil
     }
     
     public func initList(entries: [Entry]){

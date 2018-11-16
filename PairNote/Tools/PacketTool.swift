@@ -9,13 +9,14 @@
  Packet Types:
  Master
     A : notifyNew
-    B : confirmRequest
+    B : respondRequest
     C : Allcontent
  Slave
     a : Pull
     b : entryAdd
     c : entryModify
-    d : RequestModify
+    d : entryDelete
+    e : RequestModify
  */
 
 import Foundation
@@ -23,13 +24,14 @@ import SwiftSocket
 
 enum PacketType {
     case notifyNew
-    case confirmRequest
+    case respondRequest
     case allContent
     
     case pull
     case entryAdd
     case entryModify
-    case requestModity
+    case entryDelete
+    case requestModify
     
     case unknown
 }
@@ -58,7 +60,7 @@ class PacketTool {
         case UInt8(ascii:"A"):
             return .notifyNew
         case UInt8(ascii:"B"):
-            return .confirmRequest
+            return .respondRequest
         case UInt8(ascii:"C"):
             return .allContent
             
@@ -69,7 +71,9 @@ class PacketTool {
         case UInt8(ascii:"c"):
             return .entryModify
         case UInt8(ascii:"d"):
-            return .requestModity
+            return .entryDelete
+        case UInt8(ascii:"e"):
+            return .requestModify
 
         default:
             return .unknown
@@ -109,6 +113,8 @@ class PacketTool {
         return Array(paddedStr.utf8)
     }
     
+    
+    
     //MARK: client functions
     func pullRequest() -> [Byte]{
         var bytes : [Byte] = []
@@ -119,6 +125,53 @@ class PacketTool {
         return bytes
     }
     
+    func requestModify(id : String) -> [Byte]{
+        var bytes : [Byte] = []
+        bytes.append(UInt8(ascii:"e"))
+        bytes.append(UInt8(0))
+        let paddedStr = id.padding(toLength: 3200, withPad: " ", startingAt: 0)
+        bytes.append(contentsOf: Array(paddedStr.utf8))
+        return bytes
+    }
+    
+    func getRequestResult(packet : [Byte]) -> (id : String, granted : Bool){
+        let idBytes = packet[2 ..< 18]
+        let id = String(bytes: idBytes, encoding: .utf8)!
+        var granted = false
+        if (packet[1] == UInt8(ascii:"T")){
+            granted = true
+        }
+        return (id, granted)
+    }
+    
+    func addEntry(content : String) -> [Byte]{
+        var bytes : [Byte] = []
+        bytes.append(UInt8(ascii:"b"))
+        bytes.append(UInt8(1))
+        let entryString = "AAAAAAAAAAAAAAAA" + content
+        let paddedStr = entryString.padding(toLength: 3200, withPad: " ", startingAt: 0)
+        bytes.append(contentsOf: Array(paddedStr.utf8))
+        return bytes
+    }
+    
+    func modifyEntry(id: String, content : String) -> [Byte] {
+        var bytes : [Byte] = []
+        bytes.append(UInt8(ascii:"c"))
+        bytes.append(UInt8(1))
+        let entryString = id + content
+        let paddedStr = entryString.padding(toLength: 3200, withPad: " ", startingAt: 0)
+        bytes.append(contentsOf: Array(paddedStr.utf8))
+        return bytes
+    }
+    
+    func deleteEntry(id: String) -> [Byte] {
+        var bytes : [Byte] = []
+        bytes.append(UInt8(ascii:"d"))
+        bytes.append(UInt8(1))
+        let paddedStr = id.padding(toLength: 3200, withPad: " ", startingAt: 0)
+        bytes.append(contentsOf: Array(paddedStr.utf8))
+        return bytes
+    }
     
     
     //MARK: server functions
@@ -138,5 +191,53 @@ class PacketTool {
         
         return bytes
     }
+    
+    func respondRequest(id : String, granted : Bool) -> [Byte] {
+        var bytes : [Byte] = []
+        bytes.append(UInt8(ascii:"B"))
+        var isGranted = granted ? UInt8(ascii:"T") : UInt8(ascii:"F")
+        bytes.append(isGranted)
+        let paddedStr = id.padding(toLength: 3200, withPad: " ", startingAt: 0)
+        bytes.append(contentsOf: Array(paddedStr.utf8))
+        return bytes
+    }
+    
+    func handleRequest(entryModel : AllEntries, packet : [Byte]) -> (Bool, String, [Byte]){
+        let idBytes = packet[2 ..< 18]
+        let id = String(bytes: idBytes, encoding: .utf8)!
+        if let entry = entryModel.getEntry(id: id), entry.serverEditing == false {
+            return (true, id, respondRequest(id: id, granted: true))
+        } else {
+            return (false, id, respondRequest(id: id, granted: false))
+        }
+    }
+    
+    func notifyNewPacket() -> [Byte]{
+        var bytes : [Byte] = []
+        bytes.append(UInt8(ascii:"A"))
+        bytes.append(UInt8(0))
+        let paddedStr = "".padding(toLength: 3200, withPad: " ", startingAt: 0)
+        bytes.append(contentsOf: Array(paddedStr.utf8))
+        return bytes
+    }
+    
+    func getPacketContent(packet : [Byte]) -> String {
+        let contentBytes = packet[18..<66]
+        return String(bytes: contentBytes, encoding: .utf8)!.trimmingCharacters(in: .whitespaces)
+    }
+    
+    func getPacketID(packet : [Byte]) -> String {
+        let idBytes = packet[2 ..< 18]
+        return String(bytes: idBytes, encoding: .utf8)!
+    }
+    
+    func getModifyPacket(packet : [Byte]) -> (String, String) {
+        let id = getPacketID(packet: packet)
+        let content = getPacketContent(packet: packet)
+        return (id, content)
+    }
+    
+
+
 
 }

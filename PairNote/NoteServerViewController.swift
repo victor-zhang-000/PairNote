@@ -44,6 +44,7 @@ class NoteServerViewController: UIViewController {
                 //self.addNewEntry(content)
                 self.entryModel.add(content: content, completion: {
                     self.contentTableView.reloadData()
+                    self.client.send(data: PacketTool.share.notifyNewPacket())
                 })
             }
         }))
@@ -88,6 +89,52 @@ class NoteServerViewController: UIViewController {
                     case .pull:
                         self.client.send(data: PacketTool.share.allContent(entries: self.entryModel.entryList))
                         break
+                    case .requestModify:
+                        let (granted, id, sendPacket) = PacketTool.share.handleRequest(entryModel: self.entryModel, packet: bytes)
+                        if(granted) {
+                            if let entry = self.entryModel.getEntry(id: id) {
+                                entry.isLocked = true
+                                DispatchQueue.main.async {
+                                    self.contentTableView.reloadData()
+                                }
+                            }
+                        }
+                        self.client.send(data: sendPacket)
+                        break
+                    case .entryAdd:
+                        let content = PacketTool.share.getPacketContent(packet: bytes)
+                        self.entryModel.add(content: content, completion: {
+                            //send dated one, why?
+                            //print("sending")
+                            self.client.send(data: PacketTool.share.allContent(entries: self.entryModel.entryList))
+                            //print("sent")
+                            DispatchQueue.main.async {
+                                self.contentTableView.reloadData()
+                            }
+                        })
+                    case .entryModify:
+                        let (entryId, entryContent) = PacketTool.share.getModifyPacket(packet: bytes)
+                        if let entry = self.entryModel.getEntry(id: entryId), entry.isLocked == true{
+                            self.entryModel.edit(id: entryId, newContent: entryContent, completion: {
+                                self.client.send(data: PacketTool.share.allContent(entries: self.entryModel.entryList))
+                                DispatchQueue.main.async {
+                                    entry.isLocked = false
+                                    self.contentTableView.reloadData()
+                                }
+                            })
+                        }
+                        break
+                    case .entryDelete:
+                        let entryId = PacketTool.share.getPacketID(packet: bytes)
+                        if let entry = self.entryModel.getEntry(id: entryId), entry.isLocked == true{
+                            self.entryModel.remove(id: entryId, completion: {
+                                self.client.send(data: PacketTool.share.allContent(entries: self.entryModel.entryList))
+                                DispatchQueue.main.async {
+                                    self.contentTableView.reloadData()
+                                }
+                            })
+                        }
+                        break
                     default: break
                     }
                     
@@ -114,36 +161,52 @@ class NoteServerViewController: UIViewController {
 //    }
     
     func pressCell(cellNum : Int){
-        let entryId = entryModel.entryList[cellNum].identifier
-        let entryMessage = entryModel.entryList[cellNum].content
+        let entry = entryModel.entryList[cellNum]
+        let entryId = entry.identifier
+        let entryMessage = entry.content
         let handler = PressCellHandler.share
-        handler.title = "Pressed"
         
-        handler.editAction = {
-            let alert = UIAlertController(title: "Edit this entry", message: "", preferredStyle: .alert)
-            alert.addTextField(configurationHandler: { (textField) in
-                textField.text = entryMessage
-            })
-            alert.addAction(UIAlertAction(title: "Ok", style: .default, handler:  { [weak alert] (_) in
-                if let textField = alert?.textFields?[0], let content = textField.text {
-                    //self.editEntry(id: entryId, content: content)
-                    self.entryModel.edit(id: entryId, newContent: content, completion: {
-                        self.contentTableView.reloadData()
-                    })
+        if(entry.isLocked) {
+            handler.unlockAction = {
+                entry.isLocked = false
+                DispatchQueue.main.async {
+                    self.contentTableView.reloadData()
                 }
-            }))
+            }
+            handler.present(from: self, type: .unlock)
+        } else {
+            handler.editAction = {
+                let alert = UIAlertController(title: "Edit this entry", message: "", preferredStyle: .alert)
+                alert.addTextField(configurationHandler: { (textField) in
+                    textField.text = entryMessage
+                })
+                alert.addAction(UIAlertAction(title: "Ok", style: .default, handler:  { [weak alert] (_) in
+                    if let textField = alert?.textFields?[0], let content = textField.text {
+                        //self.editEntry(id: entryId, content: content)
+                        self.entryModel.edit(id: entryId, newContent: content, completion: {
+                            entry.serverEditing = false
+                            self.client.send(data: PacketTool.share.notifyNewPacket())
+                            self.contentTableView.reloadData()
+                        })
+                    }
+                }))
+                
+                alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
+                self.present(alert, animated: true)
+                entry.serverEditing = true
+                
+            }
             
-            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
-            self.present(alert, animated: true)
+            handler.deleteAction = {
+                self.entryModel.remove(id: entryId, completion: {
+                    self.client.send(data: PacketTool.share.notifyNewPacket())
+                    self.contentTableView.reloadData()
+                })
+            }
+            
+            handler.present(from: self, type: .normal)
         }
         
-        handler.deleteAction = {
-            self.entryModel.remove(id: entryId, completion: {
-                self.contentTableView.reloadData()
-            })
-        }
-        
-        handler.present(from: self)
     }
 
 }
@@ -159,6 +222,8 @@ extension NoteServerViewController: UITableViewDataSource {
         cell.textLabel?.text = "\(indexPath.row + 1) \(entry.content)"
         if(entry.isLocked) {
             cell.textLabel?.textColor = UIColor.blue
+        } else {
+            cell.textLabel?.textColor = UIColor.black
         }
         return cell
     }

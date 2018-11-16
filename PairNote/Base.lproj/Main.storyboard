@@ -164,8 +164,8 @@
                                 </prototypes>
                             </tableView>
                             <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="foo-7O-wKh">
-                                <rect key="frame" x="319" y="627" width="36" height="30"/>
-                                <state key="normal" title="Send"/>
+                                <rect key="frame" x="309" y="627" width="46" height="30"/>
+                                <state key="normal" title="Export"/>
                                 <connections>
                                     <action selector="sendMessage:" destination="gaM-kA-ocU" eventType="touchUpInside" id="UeK-4x-jBK"/>
                                 </connections>

@@ -8,6 +8,13 @@
 
 import UIKit
 
+enum HandlerType{
+    case normal
+    case request
+    case unlock
+}
+
+
 class PressCellHandler {
     static let share = PressCellHandler()
     
@@ -17,12 +24,26 @@ class PressCellHandler {
     
     var deleteAction: (()->Void)?
     
+    var requestAction: (()->Void)?
+    
+    var unlockAction: (()->Void)?
+    
     private var presentableController: UIViewController?
     
-    func present(from controller: UIViewController) {
+    func present(from controller: UIViewController, type : HandlerType) {
         presentableController = controller
-        
-        present()
+        switch type{
+        case .normal:
+            present()
+            break
+        case .request:
+            presentRequest()
+            break
+        case .unlock:
+            presentUnlock()
+            break
+        }
+        //present()
     }
 }
 
@@ -44,4 +65,33 @@ private extension PressCellHandler {
         
         presentableController?.present(controller, animated: true, completion: nil)
     }
+    
+    func presentRequest() {
+        let controller = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+        
+        controller.addAction(UIAlertAction(title: "Request Edit", style: .default, handler: { _ in
+            self.requestAction?()
+        }))
+        
+        controller.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: { _ in
+            controller.dismiss(animated: true, completion: nil)
+        }))
+        
+        presentableController?.present(controller, animated: true, completion: nil)
+    }
+    
+    func presentUnlock() {
+        let controller = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+        
+        controller.addAction(UIAlertAction(title: "Unlock", style: .default, handler: { _ in
+            self.unlockAction?()
+        }))
+        
+        controller.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: { _ in
+            controller.dismiss(animated: true, completion: nil)
+        }))
+        
+        presentableController?.present(controller, animated: true, completion: nil)
+    }
+    
 }
