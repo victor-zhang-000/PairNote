@@ -167,7 +167,7 @@
                                 <rect key="frame" x="309" y="627" width="46" height="30"/>
                                 <state key="normal" title="Export"/>
                                 <connections>
-                                    <action selector="sendMessage:" destination="gaM-kA-ocU" eventType="touchUpInside" id="UeK-4x-jBK"/>
+                                    <action selector="export:" destination="gaM-kA-ocU" eventType="touchUpInside" id="qKm-0s-WiI"/>
                                 </connections>
                             </button>
                         </subviews>

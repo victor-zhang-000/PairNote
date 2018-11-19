@@ -46,7 +46,7 @@ class ViewController: UIViewController {
     
     @IBAction func startServerPressed(_ sender: Any) {
         if (!ipValid()) {
-            return
+            self.presentAlert(title: "Invalid IP", messageStr: "Please enter a valid IP address")
         }
         let storyBoard = UIStoryboard.init(name: "Main", bundle: nil)
         if let controller = storyBoard.instantiateViewController(withIdentifier: "NoteServerViewController") as? NoteServerViewController{
@@ -66,6 +66,12 @@ class ViewController: UIViewController {
             controller.partnerIP = partnerIPTextField.text
             self.navigationController?.pushViewController(controller, animated: true)
         }
+    }
+    
+    func presentAlert(title : String, messageStr : String){
+        let alert = UIAlertController(title: title, message: messageStr, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Ok", style: .default, handler: nil))
+        self.present(alert, animated: true)
     }
     
 

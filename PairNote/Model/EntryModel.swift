@@ -24,7 +24,8 @@ class Entry {
 
 class AllEntries {
     var entryList: [Entry] = []
-    let queue = DispatchQueue(label: "MyArrayQueue", attributes: .concurrent)
+    let queue = DispatchQueue(label: "MyArrayQueue")
+    var exportString = "Thanks for using PairNote"
     
     public func add(content : String, completion : @escaping () -> Void){
         let newEntry = Entry(id : PacketTool.share.generateID())
@@ -33,7 +34,6 @@ class AllEntries {
         myGroup.enter()
         queue.async(flags : .barrier) {
             self.entryList.append(newEntry)
-            print("added")
             myGroup.leave()
         }
         myGroup.notify(queue: DispatchQueue.main) {
@@ -80,6 +80,24 @@ class AllEntries {
     
     public func initList(entries: [Entry]){
         entryList = entries
+    }
+    
+    public func exportToString(completion : @escaping () -> Void) {
+        let myGroup = DispatchGroup()
+        myGroup.enter()
+        var ret = ""
+        queue.async {
+            for i in 0..<self.entryList.count {
+                ret += "\(i + 1). "
+                ret += self.entryList[i].content
+                ret += "\n"
+            }
+            self.exportString = ret
+            myGroup.leave()
+        }
+        myGroup.notify(queue: DispatchQueue.main) {
+            completion()
+        }
     }
     
 }

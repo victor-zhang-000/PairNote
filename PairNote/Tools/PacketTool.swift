@@ -49,7 +49,7 @@ class PacketTool {
         let stringToInteger = (doubleToString as NSString).integerValue
         var result = "\(stringToInteger)"
         
-        for i in 0..<6{
+        for _ in 0..<6{
             result.append(Character(UnicodeScalar(randomInt(65, 125))!))
         }
         return result

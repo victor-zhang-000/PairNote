@@ -37,6 +37,7 @@ class NoteServerViewController: UIViewController {
         let alert = UIAlertController(title: "Add a new entry", message: "", preferredStyle: .alert)
         alert.addTextField(configurationHandler: { (textField) in
             textField.placeholder = "Enter content here"
+            textField.delegate = self
         })
         alert.addAction(UIAlertAction(title: "Ok", style: .default, handler:  { [weak alert] (_) in
             //print("Text field: \(textField?.text)")
@@ -58,16 +59,24 @@ class NoteServerViewController: UIViewController {
         // Dispose of any resources that can be recreated.
     }
     
-    @IBAction func sendMessage(_ sender: Any) {
-//        let str = "Hello"
-//        client.send(data: Array(str.utf8))
-        //print(PacketTool.share.allContent(entries: entryModel.entryList).count)
-        client.send(data: PacketTool.share.allContent(entries: entryModel.entryList))
+    override func viewWillDisappear(_ animated: Bool) {
+        self.server.close()
+    }
+    
+    
+    @IBAction func export(_ sender: Any) {
+        entryModel.exportToString {
+            let firstActivityItem = self.entryModel.exportString
+            let activityViewController : UIActivityViewController = UIActivityViewController(
+                activityItems: [firstActivityItem], applicationActivities: nil)
+            DispatchQueue.main.async {
+                self.present(activityViewController, animated: true, completion: nil)
+            }
+        }
+        
     }
     
     func setupServer(){
-        //print("self IP: " + selfIP!)
-        //print("partner IP: " + partnerIP!)
         if let ip1 = selfIP, let ip2 = partnerIP {
             server = UDPServer(address: ip1, port: 55500)
             client = UDPClient(address: ip2, port: 55600)
@@ -75,19 +84,16 @@ class NoteServerViewController: UIViewController {
     }
     
     func startReadingQueue() {
-        
         readingWorkItem = DispatchWorkItem {
             guard let item = self.readingWorkItem else { return }
-            
             while !item.isCancelled {
                 let (packet, _ , _) = self.server.recv(3202)
                 if let bytes = packet{
-                    //self.presentAlert()
                     let packetType = PacketTool.share.handlePacket(packet: bytes)
                     print(packetType)
                     switch packetType{
                     case .pull:
-                        self.client.send(data: PacketTool.share.allContent(entries: self.entryModel.entryList))
+                        _ = self.client.send(data: PacketTool.share.allContent(entries: self.entryModel.entryList))
                         break
                     case .requestModify:
                         let (granted, id, sendPacket) = PacketTool.share.handleRequest(entryModel: self.entryModel, packet: bytes)
@@ -99,24 +105,22 @@ class NoteServerViewController: UIViewController {
                                 }
                             }
                         }
-                        self.client.send(data: sendPacket)
+                        _ = self.client.send(data: sendPacket)
                         break
                     case .entryAdd:
                         let content = PacketTool.share.getPacketContent(packet: bytes)
                         self.entryModel.add(content: content, completion: {
-                            //send dated one, why?
-                            //print("sending")
-                            self.client.send(data: PacketTool.share.allContent(entries: self.entryModel.entryList))
-                            //print("sent")
+                            _ = self.client.send(data: PacketTool.share.allContent(entries: self.entryModel.entryList))
                             DispatchQueue.main.async {
                                 self.contentTableView.reloadData()
                             }
                         })
+                        break
                     case .entryModify:
                         let (entryId, entryContent) = PacketTool.share.getModifyPacket(packet: bytes)
                         if let entry = self.entryModel.getEntry(id: entryId), entry.isLocked == true{
                             self.entryModel.edit(id: entryId, newContent: entryContent, completion: {
-                                self.client.send(data: PacketTool.share.allContent(entries: self.entryModel.entryList))
+                                _ = self.client.send(data: PacketTool.share.allContent(entries: self.entryModel.entryList))
                                 DispatchQueue.main.async {
                                     entry.isLocked = false
                                     self.contentTableView.reloadData()
@@ -128,7 +132,7 @@ class NoteServerViewController: UIViewController {
                         let entryId = PacketTool.share.getPacketID(packet: bytes)
                         if let entry = self.entryModel.getEntry(id: entryId), entry.isLocked == true{
                             self.entryModel.remove(id: entryId, completion: {
-                                self.client.send(data: PacketTool.share.allContent(entries: self.entryModel.entryList))
+                                _ = self.client.send(data: PacketTool.share.allContent(entries: self.entryModel.entryList))
                                 DispatchQueue.main.async {
                                     self.contentTableView.reloadData()
                                 }
@@ -137,7 +141,6 @@ class NoteServerViewController: UIViewController {
                         break
                     default: break
                     }
-                    
                 }
             }
         }
@@ -179,6 +182,7 @@ class NoteServerViewController: UIViewController {
                 let alert = UIAlertController(title: "Edit this entry", message: "", preferredStyle: .alert)
                 alert.addTextField(configurationHandler: { (textField) in
                     textField.text = entryMessage
+                    textField.delegate = self
                 })
                 alert.addAction(UIAlertAction(title: "Ok", style: .default, handler:  { [weak alert] (_) in
                     if let textField = alert?.textFields?[0], let content = textField.text {
@@ -235,5 +239,12 @@ extension NoteServerViewController : UITableViewDelegate {
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         pressCell(cellNum: indexPath.row)
     }
+}
 
+extension NoteServerViewController : UITextFieldDelegate {
+    func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
+        guard let text = textField.text else { return true }
+        let count = text.count + string.count - range.length
+        return count <= 48
+    }
 }

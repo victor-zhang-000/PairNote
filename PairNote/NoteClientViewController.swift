@@ -44,10 +44,15 @@ class NoteClientViewController: UIViewController {
         // Dispose of any resources that can be recreated.
     }
     
+    override func viewWillDisappear(_ animated: Bool) {
+        self.server.close()
+    }
+    
     @objc func addButtonClicked( _ sender: Any) {
         let alert = UIAlertController(title: "Add a new entry", message: "", preferredStyle: .alert)
         alert.addTextField(configurationHandler: { (textField) in
             textField.placeholder = "Enter content here"
+            textField.delegate = self
         })
         alert.addAction(UIAlertAction(title: "Ok", style: .default, handler:  { [weak alert] (_) in
             if let textField = alert?.textFields?[0], let content = textField.text {
@@ -72,10 +77,8 @@ class NoteClientViewController: UIViewController {
     }
     
     func startReadingQueue() {
-        
         readingWorkItem = DispatchWorkItem {
             guard let item = self.readingWorkItem else { return }
-            
             while !item.isCancelled {
                 let (packet, _ , _) = self.server.recv(3202)
                 if let bytes = packet{
@@ -93,7 +96,6 @@ class NoteClientViewController: UIViewController {
                             self.contentTableView.reloadData()
                             self.navigationItem.title = ""
                         }
-
                         break
                     case .notifyNew:
                         DispatchQueue.main.async {
@@ -116,7 +118,6 @@ class NoteClientViewController: UIViewController {
                         break
                     default: break
                     }
-                    
                 }
                 
             }
@@ -142,6 +143,7 @@ class NoteClientViewController: UIViewController {
                 let alert = UIAlertController(title: "Edit this entry", message: "", preferredStyle: .alert)
                 alert.addTextField(configurationHandler: { (textField) in
                     textField.text = entryMessage
+                    textField.delegate = self
                 })
                 alert.addAction(UIAlertAction(title: "Ok", style: .default, handler:  { [weak alert] (_) in
                     if let textField = alert?.textFields?[0], let content = textField.text {
@@ -202,4 +204,11 @@ extension NoteClientViewController : UITableViewDelegate {
     
 }
 
+extension NoteClientViewController : UITextFieldDelegate {
+    func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
+        guard let text = textField.text else { return true }
+        let count = text.count + string.count - range.length
+        return count <= 48
+    }
+}
 
